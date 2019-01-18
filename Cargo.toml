@@ -8,4 +8,7 @@ edition = "2018"
 version = "0.31.0"
 
 [dependencies]
-gl = "0.10.0"
+gl = { path = "lib/gl" }
+
+[features]
+gl_debug = ["gl/debug"]
