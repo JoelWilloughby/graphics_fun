@@ -1,7 +1,20 @@
 use gl;
-use crate::resources::Resources;
+use crate::resources::{self, Resources};
 use std;
 use std::ffi::{CString, CStr};
+
+#[derive(Debug)]
+pub enum Error {
+    ResourceLoad { inner: resources::Error },
+    CompileError { message: String },
+    LinkError { message: String },
+}
+
+impl From<resources::Error> for Error {
+    fn from(other: resources::Error) -> Self {
+        Error::ResourceLoad{inner: other}
+    }
+}
 
 pub trait ShaderSource {
     fn fragment_shader(&self) -> &String;
@@ -56,7 +69,7 @@ fn shader_from_source(
     gl: &gl::Gl,
     source: &CStr,
     kind: gl::types::GLenum
-) -> Result<gl::types::GLuint, String> {
+) -> Result<gl::types::GLuint, Error> {
 
     // Returns a shader id from source shader
     let id = unsafe { gl.CreateShader(kind) };
@@ -93,7 +106,7 @@ fn shader_from_source(
         }
 
         // Return a new owned version of the error string
-        return Err(error.to_string_lossy().into_owned());
+        return Err(Error::CompileError{message: error.to_string_lossy().into_owned()});
     }
 
     Ok(id)
@@ -109,7 +122,7 @@ impl Shader {
         gl: &gl::Gl,
         source: &CStr,
         kind: gl::types::GLenum
-    ) -> Result<Shader, String> {
+    ) -> Result<Shader, Error> {
         let id = shader_from_source(gl, source, kind)?;
         Ok(Shader{gl: gl.clone(), id: id})
     }
@@ -119,20 +132,17 @@ impl Shader {
         res: &Resources,
         name: &str,
         kind: gl::types::GLenum
-    ) -> Result<Shader, String> {
-        let source = res.load_cstring(name)
-            .map_err(|e| format!("Error loading resource {}: {:?}", name, e))?;
-
-        print!("{}",source.to_str().unwrap());
+    ) -> Result<Shader, Error> {
+        let source = res.load_cstring(name)?;
 
         Shader::from_source(gl, &source, kind)
     }
 
-    pub fn from_vertex_source(gl: &gl::Gl, source: &CStr) -> Result<Shader, String> {
+    pub fn from_vertex_source(gl: &gl::Gl, source: &CStr) -> Result<Shader, Error> {
         Shader::from_source(gl, source, gl::VERTEX_SHADER)
     }
 
-    pub fn from_fragment_source(gl: &gl::Gl, source: &CStr) -> Result<Shader, String> {
+    pub fn from_fragment_source(gl: &gl::Gl, source: &CStr) -> Result<Shader, Error> {
         Shader::from_source(gl, source, gl::FRAGMENT_SHADER)
     }
 
@@ -150,7 +160,7 @@ impl Drop for Shader {
 }
 
 impl Program {
-    pub fn from_shaders(gl: &gl::Gl, shaders: &[Shader]) -> Result<Program, String> {
+    pub fn from_shaders(gl: &gl::Gl, shaders: &[Shader]) -> Result<Program, Error> {
         let program_id = unsafe { gl.CreateProgram() };
 
         for shader in shaders {
@@ -181,7 +191,7 @@ impl Program {
                 );
             }
 
-            return Err(error.to_string_lossy().into_owned());
+            return Err(Error::LinkError{message: error.to_string_lossy().into_owned()});
         }
 
         for shader in shaders {
@@ -195,12 +205,12 @@ impl Program {
         gl: &gl::Gl,
         res: &Resources,
         collection: &I
-    ) -> Result<Program, String> where I: ShaderSource  {
+    ) -> Result<Program, Error> where I: ShaderSource  {
         let names = [(collection.vertex_shader(), gl::VERTEX_SHADER), (collection.fragment_shader(), gl::FRAGMENT_SHADER)];
 
         let shaders = names.iter()
             .map(|(file, kind)| {Shader::from_res(gl, res, &file, *kind)})
-            .collect::<Result<Vec<Shader>, String>>()?;
+            .collect::<Result<Vec<Shader>, Error>>()?;
 
         Program::from_shaders(gl, &shaders[..])
     }
