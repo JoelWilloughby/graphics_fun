@@ -2,6 +2,7 @@ extern crate gl;
 extern crate sdl2;
 
 pub mod render_gl;
+pub mod resources;
 
 fn main() {
     let sdl = sdl2::init().unwrap();
@@ -31,20 +32,12 @@ fn main() {
 
     let mut event_pump = sdl.event_pump().unwrap();
 
-    use std::ffi::CString;
-    let vert_shader = render_gl::Shader::from_vertex_source(
-        &gl,
-        &CString::new(include_str!("triangle.vert")).unwrap()
-    ).unwrap();
+    let res = resources::Resources::from_relative_exe_path(std::path::Path::new("assets")).unwrap();
 
-    let frag_shader = render_gl::Shader::from_fragment_source(
+    let shader_program = render_gl::Program::from_res(
         &gl,
-        &CString::new(include_str!("triangle.frag")).unwrap()
-    ).unwrap();
-
-    let shader_program = render_gl::Program::from_shaders(
-        &gl,
-        &[vert_shader, frag_shader]
+        &res,
+        &render_gl::ShaderCollection::from_simple("shaders/triangle")
     ).unwrap();
 
     shader_program.set_used();
@@ -59,7 +52,7 @@ fn main() {
     unsafe { gl.GenBuffers(1, &mut vbo) };
 
     unsafe {
-        gl.BindBuffer(gl::ARRAY_BUFFER, 42);
+        gl.BindBuffer(gl::ARRAY_BUFFER, vbo);
         gl.BufferData(
             gl::ARRAY_BUFFER,
             (vertices.len() * std::mem::size_of::<f32>()) as gl::types::GLsizeiptr,

@@ -1,6 +1,45 @@
 use gl;
+use crate::resources::Resources;
 use std;
 use std::ffi::{CString, CStr};
+
+pub trait ShaderSource {
+    fn fragment_shader(&self) -> &String;
+    fn vertex_shader(&self) -> &String;
+}
+
+pub struct ShaderCollection {
+    fragment: String,
+    vertex: String,
+}
+
+impl ShaderCollection {
+    pub fn from_all(
+        vertex: &str,
+        fragment: &str,
+    ) -> ShaderCollection {
+        ShaderCollection{fragment: fragment.to_string(), vertex: vertex.to_string()}
+    }
+
+    pub fn from_simple(
+        prefix: &str
+    ) -> ShaderCollection {
+        let vert = format!("{}.vert", prefix);
+        let frag = format!("{}.frag", prefix);
+
+        ShaderCollection{fragment: frag.to_string(), vertex: vert.to_string()}
+    }
+}
+
+impl ShaderSource for ShaderCollection {
+    fn fragment_shader(&self) -> &String {
+        &self.fragment
+    }
+
+    fn vertex_shader(&self) -> &String {
+        &self.vertex
+    }
+}
 
 pub struct Program {
     gl: gl::Gl,
@@ -75,6 +114,20 @@ impl Shader {
         Ok(Shader{gl: gl.clone(), id: id})
     }
 
+    pub fn from_res(
+        gl: &gl::Gl,
+        res: &Resources,
+        name: &str,
+        kind: gl::types::GLenum
+    ) -> Result<Shader, String> {
+        let source = res.load_cstring(name)
+            .map_err(|e| format!("Error loading resource {}: {:?}", name, e))?;
+
+        print!("{}",source.to_str().unwrap());
+
+        Shader::from_source(gl, &source, kind)
+    }
+
     pub fn from_vertex_source(gl: &gl::Gl, source: &CStr) -> Result<Shader, String> {
         Shader::from_source(gl, source, gl::VERTEX_SHADER)
     }
@@ -136,6 +189,20 @@ impl Program {
         }
 
         Ok(Program {gl: gl.clone(), id: program_id})
+    }
+
+    pub fn from_res<I> (
+        gl: &gl::Gl,
+        res: &Resources,
+        collection: &I
+    ) -> Result<Program, String> where I: ShaderSource  {
+        let names = [(collection.vertex_shader(), gl::VERTEX_SHADER), (collection.fragment_shader(), gl::FRAGMENT_SHADER)];
+
+        let shaders = names.iter()
+            .map(|(file, kind)| {Shader::from_res(gl, res, &file, *kind)})
+            .collect::<Result<Vec<Shader>, String>>()?;
+
+        Program::from_shaders(gl, &shaders[..])
     }
 
     pub fn id(&self) -> gl::types::GLuint {

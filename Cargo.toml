@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["Joel Willoughby <jawilloughby68@gmail.com>"]
 edition = "2018"
 
+[build-dependencies]
+walkdir = "2.1"
+
 [dependencies.sdl2]
 version = "0.31.0"
 
