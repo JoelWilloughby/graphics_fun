@@ -3,17 +3,16 @@ use crate::resources::{self, Resources};
 use std;
 use std::ffi::{CString, CStr};
 
-#[derive(Debug)]
+#[derive(Debug, Fail)]
 pub enum Error {
-    ResourceLoad { inner: resources::Error },
-    CompileError { message: String },
+    #[fail(display = "Failed to load resource {}", name)]
+    ResourceLoad { name: String, #[cause] inner: resources::Error },
+    #[fail(display = "Failed to compile shader {}: {}", name, message)]
+    CompileError { name: String, message: String },
+    #[fail(display = "Failed to compile given source: {}", message)]
+    GenericCompileError { message: String },
+    #[fail(display = "Failed to link program: {}", message)]
     LinkError { message: String },
-}
-
-impl From<resources::Error> for Error {
-    fn from(other: resources::Error) -> Self {
-        Error::ResourceLoad{inner: other}
-    }
 }
 
 pub trait ShaderSource {
@@ -69,7 +68,7 @@ fn shader_from_source(
     gl: &gl::Gl,
     source: &CStr,
     kind: gl::types::GLenum
-) -> Result<gl::types::GLuint, Error> {
+) -> Result<gl::types::GLuint, String> {
 
     // Returns a shader id from source shader
     let id = unsafe { gl.CreateShader(kind) };
@@ -106,7 +105,7 @@ fn shader_from_source(
         }
 
         // Return a new owned version of the error string
-        return Err(Error::CompileError{message: error.to_string_lossy().into_owned()});
+        return Err(error.to_string_lossy().into_owned());
     }
 
     Ok(id)
@@ -123,7 +122,8 @@ impl Shader {
         source: &CStr,
         kind: gl::types::GLenum
     ) -> Result<Shader, Error> {
-        let id = shader_from_source(gl, source, kind)?;
+        let id = shader_from_source(gl, source, kind)
+            .map_err(|e| {Error::GenericCompileError{message: e}})?;
         Ok(Shader{gl: gl.clone(), id: id})
     }
 
@@ -133,9 +133,18 @@ impl Shader {
         name: &str,
         kind: gl::types::GLenum
     ) -> Result<Shader, Error> {
-        let source = res.load_cstring(name)?;
+        let source = res.load_cstring(name)
+            .map_err(|e| {Error::ResourceLoad{name: name.to_string(), inner: e}})?;
 
         Shader::from_source(gl, &source, kind)
+            .map_err(|e| {
+                let message = match e {
+                    Error::GenericCompileError{message: m} => m,
+                    _ => format!("{}", e),
+                };
+
+                Error::CompileError{name: name.to_string(), message: message}
+        })
     }
 
     pub fn from_vertex_source(gl: &gl::Gl, source: &CStr) -> Result<Shader, Error> {
@@ -160,7 +169,10 @@ impl Drop for Shader {
 }
 
 impl Program {
-    pub fn from_shaders(gl: &gl::Gl, shaders: &[Shader]) -> Result<Program, Error> {
+    pub fn from_shaders(
+        gl: &gl::Gl, 
+        shaders: &[Shader]
+    ) -> Result<Program, Error> {
         let program_id = unsafe { gl.CreateProgram() };
 
         for shader in shaders {
@@ -205,8 +217,9 @@ impl Program {
         gl: &gl::Gl,
         res: &Resources,
         collection: &I
-    ) -> Result<Program, Error> where I: ShaderSource  {
-        let names = [(collection.vertex_shader(), gl::VERTEX_SHADER), (collection.fragment_shader(), gl::FRAGMENT_SHADER)];
+    ) -> Result<Program, Error> where I: ShaderSource {
+        let names = [(collection.vertex_shader(), gl::VERTEX_SHADER), 
+                     (collection.fragment_shader(), gl::FRAGMENT_SHADER)];
 
         let shaders = names.iter()
             .map(|(file, kind)| {Shader::from_res(gl, res, &file, *kind)})
