@@ -1,38 +1,23 @@
 #[macro_use] extern crate failure;
 extern crate gl;
 extern crate sdl2;
+extern crate render_gl_derive;
 
 pub mod render_gl;
 pub mod resources;
 
 use failure::err_msg;
 use crate::render_gl::data;
+use render_gl_derive::VertexAttribPointers;
 
+#[derive(VertexAttribPointers)]
 #[derive(Copy, Clone, Debug)]
 #[repr(C, packed)]
 struct Vertex {
+    #[location = 0]
     pos: data::vec3f,
+    #[location = 1]
     clr: data::vec3f, 
-}
-
-impl Vertex {
-    fn vertex_attrib_pointers(gl: &gl::Gl) {
-        let stride = std::mem::size_of::<Self>();
-
-        let location = 0;
-        let offset = 0;
-
-        unsafe {
-            data::vec3f::vertex_attrib_pointer(gl, stride, location, offset);
-        }
-
-        let location = 1;
-        let offset = offset + std::mem::size_of::<data::vec3f>();
-
-        unsafe {
-            data::vec3f::vertex_attrib_pointer(gl, stride, location, offset);
-        }
-    }
 }
 
 fn run() -> Result<(), failure::Error> {

@@ -13,6 +13,7 @@ version = "0.31.0"
 [dependencies]
 gl = { path = "lib/gl" }
 failure = "0.1"
+render_gl_derive = { path = "render_gl_derive" }
 
 [features]
 gl_debug = ["gl/debug"]
