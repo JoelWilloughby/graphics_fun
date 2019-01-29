@@ -15,9 +15,9 @@ use render_gl_derive::VertexAttribPointers;
 #[repr(C, packed)]
 struct Vertex {
     #[location = 0]
-    pos: data::vec3f,
+    pos: data::f32_f32_f32,
     #[location = 1]
-    clr: data::vec3f, 
+    clr: data::u2_u10_u10_u10_rev_float,
 }
 
 fn run() -> Result<(), failure::Error> {
@@ -58,37 +58,24 @@ fn run() -> Result<(), failure::Error> {
     shader_program.set_used();
 
     let vertices: Vec<Vertex> = vec![
-        Vertex { pos: (-0.5, -0.5, 0.0).into(), clr: (1.0, 0.0, 0.0).into() },
-        Vertex { pos: ( 0.5, -0.5, 0.0).into(), clr: (0.0, 1.0, 0.0).into() },
-        Vertex { pos: ( 0.0,  0.5, 0.0).into(), clr: (0.0, 0.0, 1.0).into() },
+        Vertex { pos: (-0.5, -0.5, 0.0).into(), clr: (1.0, 0.0, 0.0, 1.0).into() },
+        Vertex { pos: ( 0.5, -0.5, 0.0).into(), clr: (0.0, 1.0, 1.0, 0.5).into() },
+        Vertex { pos: ( 0.0,  0.5, 0.0).into(), clr: (0.0, 0.0, 1.0, 1.0).into() },
     ];
 
-    let mut vbo: gl::types::GLuint = 0;
-    unsafe { gl.GenBuffers(1, &mut vbo) };
+    let vbo = render_gl::buffer::ArrayBuffer::new(&gl);
 
-    unsafe {
-        gl.BindBuffer(gl::ARRAY_BUFFER, vbo);
-        gl.BufferData(
-            gl::ARRAY_BUFFER,
-            (vertices.len() * std::mem::size_of::<Vertex>()) as gl::types::GLsizeiptr,
-            vertices.as_ptr() as *const gl::types::GLvoid,
-            gl::STATIC_DRAW,
-        );
-        gl.BindBuffer(gl::ARRAY_BUFFER, 0);
-    }
+    vbo.bind();
+    vbo.static_draw_data(&vertices);
+    vbo.unbind();
 
-    let mut vao: gl::types::GLuint = 0;
-    unsafe { gl.GenVertexArrays(1, &mut vao) };
-
-    unsafe {
-        gl.BindVertexArray(vao);
-        gl.BindBuffer(gl::ARRAY_BUFFER, vbo);
-
-        Vertex::vertex_attrib_pointers(&gl);
-
-        gl.BindBuffer(gl::ARRAY_BUFFER, 0);
-        gl.BindVertexArray(0);
-    }
+    let vao = render_gl::buffer::VertexArray::new(&gl);
+    
+    vao.bind();
+    vbo.bind();
+    Vertex::vertex_attrib_pointers(&gl);
+    vbo.unbind();
+    vao.unbind();
 
     'busy: loop {
         for _event in event_pump.poll_iter() {
@@ -105,8 +92,9 @@ fn run() -> Result<(), failure::Error> {
         }
 
         shader_program.set_used();
+        vao.bind();
+
         unsafe {
-            gl.BindVertexArray(vao);
             gl.DrawArrays(gl::TRIANGLES, 0, 3);
         }
 
